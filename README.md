@@ -16,6 +16,10 @@ Web scraping project for getting top products.
 ```sh
 make start or mvn spring-boot:run 
 ```
+open [index page](http://localhost:8082) or
+```sh
+ curl -i http://localhost:8082/download-product-csv
+```
 
 ## License
 Distributed under the Apache License 2.0. See [LICENSE](LICENSE#section) for more information.
