@@ -5,6 +5,7 @@ import brick.scrape.model.AceShop;
 import brick.scrape.model.Product;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -15,6 +16,7 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+@Slf4j
 @Component
 public class ProductMapper {
 
@@ -93,5 +95,25 @@ public class ProductMapper {
             products.add(product);
         }
         return products;
+    }
+
+    public List<Product> getProducts(String pageContent) throws Exception {
+        try {
+            // get content page
+            final String content = getContent(pageContent);
+
+            // get product
+            final List<AceSearchProduct> productsContent = getProductsContent(content);
+
+            // get shop
+            final Map<String, AceShop> shopsContent = getShopsContent(content);
+
+            // mapping the product
+            return getProducts(productsContent, shopsContent);
+        } catch (JsonProcessingException e) {
+            log.error(e.getMessage(), e);
+        }
+
+        throw new Exception("Error when parse the content");
     }
 }

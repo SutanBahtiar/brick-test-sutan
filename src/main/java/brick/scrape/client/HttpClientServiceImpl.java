@@ -1,10 +1,7 @@
 package brick.scrape.client;
 
 import brick.scrape.mapper.ProductMapper;
-import brick.scrape.model.AceSearchProduct;
-import brick.scrape.model.AceShop;
 import brick.scrape.model.Product;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.hc.client5.http.ClientProtocolException;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
@@ -17,19 +14,19 @@ import org.apache.hc.core5.http.io.HttpClientResponseHandler;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.io.support.ClassicRequestBuilder;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.List;
-import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 import static brick.scrape.client.HttpClientConstants.ACCEPT;
 import static brick.scrape.client.HttpClientConstants.ACCEPT_ENCODING;
 import static brick.scrape.client.HttpClientConstants.ACCEPT_LANGUAGE;
-import static brick.scrape.client.HttpClientConstants.PAGE_ONE_URL;
-import static brick.scrape.client.HttpClientConstants.PAGE_TWO_URL;
 import static brick.scrape.client.HttpClientConstants.REFERER;
 import static brick.scrape.client.HttpClientConstants.USER_AGENT;
 
@@ -41,48 +38,36 @@ public class HttpClientServiceImpl implements HttpClientService {
     private final ProductMapper productMapper;
 
     @Autowired
-    public HttpClientServiceImpl(ProductMapper productMapper,
-                                 CloseableHttpClient httpClient) {
-        this.productMapper = productMapper;
+    public HttpClientServiceImpl(CloseableHttpClient httpClient,
+                                 ProductMapper productMapper) {
         this.httpClient = httpClient;
+        this.productMapper = productMapper;
     }
 
     @Override
-    public List<Product> getProducts() {
-        final List<Product> productsPageOne = getProducts(getPageOne());
-        final List<Product> productsPageTwo = getProducts(getPageTwo());
-        return productMapper.getProducts(productsPageOne, productsPageTwo);
+    public List<Product> getProducts(List<Product> productPageOne,
+                                     List<Product> productPageTwo) {
+        return productMapper.getProducts(productPageOne, productPageTwo);
     }
 
-    public List<Product> getProducts(String pageContent) {
+    @Async
+    public CompletableFuture<List<Product>> getProductsFuture(String url) throws Exception {
+        log.info("Parse products of:{}", url);
+        final String pageContent = requestGet(url);
+        if (null == pageContent)
+            throw new Exception("Error when request " + url);
+
         try {
-            // get content page one
-            final String content = productMapper.getContent(pageContent);
-
-            // get product
-            final List<AceSearchProduct> productsContent = productMapper.getProductsContent(content);
-
-            // get shop
-            final Map<String, AceShop> shopsContent = productMapper.getShopsContent(content);
-
-            // mapping the product
-            return productMapper.getProducts(productsContent, shopsContent);
-        } catch (JsonProcessingException e) {
+            final List<Product> products = productMapper.getProducts(pageContent);
+            return CompletableFuture.completedFuture(products);
+        } catch (InterruptedException | ExecutionException e) {
             log.error(e.getMessage(), e);
         }
-
-        return null;
-    }
-
-    public String getPageOne() {
-        return requestGet(PAGE_ONE_URL);
-    }
-
-    public String getPageTwo() {
-        return requestGet(PAGE_TWO_URL);
+        throw new Exception("Error when get content of product " + url);
     }
 
     public String requestGet(String url) {
+        log.info("Request get:{}", url);
         try {
             final ClassicHttpRequest httpRequest = ClassicRequestBuilder.get()
                     .setUri(new URI(url))
@@ -95,7 +80,7 @@ public class HttpClientServiceImpl implements HttpClientService {
             httpRequest.addHeader(HttpHeaders.REFERER, REFERER);
 
             return httpClient.execute(httpRequest, responseHandler());
-        } catch (URISyntaxException | IOException e) {
+        } catch (IOException | URISyntaxException e) {
             log.error(e.getMessage(), e);
         }
 
